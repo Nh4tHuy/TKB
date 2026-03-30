@@ -59,7 +59,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 pb-12 min-h-screen flex flex-col transition-colors duration-300">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
 
     <!-- Toast Container -->
     <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2"></div>
@@ -91,11 +91,26 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 flex-1 w-full" id="app-content">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12 flex-1 w-full" id="app-content">
         <!-- Views rendered via JS -->
     </main>
 
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 py-6 text-center transition-colors">
+        <div class="max-w-7xl mx-auto px-4">
+            <p class="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                &copy; <span id="current-year"></span> - Bản quyền thuộc về Nh4tHuy
+            </p>
+            <p class="mt-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                Hệ thống hỗ trợ xếp thời khóa biểu thông minh và tối ưu.
+            </p>
+        </div>
+    </footer>
+
     <script>
+        // Set Current Year
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
         // --- INITIALIZE THEME ---
         if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
@@ -109,10 +124,10 @@
         }
 
         // --- DATA ---
-        let subjects = []; // Đã xóa dữ liệu mẫu
+        let subjects = []; 
 
         // --- STATE ---
-        let activeTab = 'input'; // input, filters, results
+        let activeTab = 'input'; 
         let preferredDays = [2, 3, 4, 5, 6];
         let avoidDays = [7, 8];
         let preferredGroups = []; 
@@ -123,8 +138,9 @@
 
         // UI State cho việc hiển thị form nhập liệu nội tuyến (inline forms)
         let uiState = {
-            addingGroupToSubject: null, // Lưu ID của môn học đang được thêm nhóm
-            addingSessionToGroup: null, // Lưu ID của nhóm đang được thêm buổi học
+            addingGroupToSubject: null, 
+            addingSessionToGroup: null, 
+            editingSessionId: null, // Lưu ID của buổi học đang được chỉnh sửa
         };
 
         // --- UTILITIES ---
@@ -195,6 +211,112 @@
             document.getElementById('modal-root').innerHTML = '';
         }
 
+        // --- IMPORT DATA (JSON) ---
+        function openImportModal() {
+            const root = document.getElementById('modal-root');
+            root.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+                    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeImportModal()"></div>
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden z-10 flex flex-col max-h-[90vh] transform transition-all animate-slide-up">
+                        <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><i class="fa-solid fa-file-import text-blue-500"></i> Nhập Data (JSON)</h3>
+                        </div>
+                        <div class="p-6 flex-1 overflow-y-auto">
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Dán đoạn mã JSON chứa danh sách học phần vào bên dưới ( Dữ liệu cũ sẽ bị ghi đè ):</p>
+                            <textarea id="import-json-data" class="w-full h-64 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 font-mono text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 custom-scrollbar"></textarea>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
+                            <button onclick="closeImportModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700 rounded-lg transition-colors">Hủy</button>
+                            <button onclick="executeImport()" class="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-lg transition-colors shadow-sm">Nhập dữ liệu</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeImportModal() {
+            document.getElementById('modal-root').innerHTML = '';
+        }
+
+        function executeImport() {
+            try {
+                const data = JSON.parse(document.getElementById('import-json-data').value);
+                if (Array.isArray(data)) {
+                    subjects = data;
+                    closeImportModal();
+                    showToast('Đã nạp dữ liệu thành công!', 'success');
+                    renderAll();
+                } else {
+                    showToast('Dữ liệu không hợp lệ. Vui lòng nhập một mảng JSON.', 'error');
+                }
+            } catch (e) {
+                showToast('Lỗi cú pháp JSON. Vui lòng kiểm tra lại.', 'error');
+            }
+        }
+
+        // --- EXPORT DATA (JSON) ---
+        function openExportModal() {
+            const dataStr = JSON.stringify(subjects, null, 2);
+            const root = document.getElementById('modal-root');
+            root.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+                    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeExportModal()"></div>
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden z-10 flex flex-col max-h-[90vh] transform transition-all animate-slide-up">
+                        <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                            <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><i class="fa-solid fa-file-export text-emerald-500"></i> Xuất Data (JSON)</h3>
+                            <button onclick="copyExportData()" class="text-sm bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-2">
+                                <i class="fa-regular fa-copy"></i> Sao chép
+                            </button>
+                        </div>
+                        <div class="p-6 flex-1 overflow-y-auto">
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Lưu trữ hoặc chia sẻ đoạn mã JSON bên dưới. Bạn có thể dán đoạn mã này vào tính năng "Nhập Data" ở thiết bị khác.</p>
+                            <textarea id="export-json-data" readonly class="w-full h-64 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 font-mono text-sm text-slate-700 dark:text-slate-300 focus:outline-none custom-scrollbar">${dataStr}</textarea>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
+                            <button onclick="closeExportModal()" class="px-5 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 rounded-lg transition-colors shadow-sm">Đóng</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeExportModal() {
+            document.getElementById('modal-root').innerHTML = '';
+        }
+
+        function copyExportData() {
+            const textarea = document.getElementById('export-json-data');
+            textarea.select();
+            document.execCommand('copy');
+            showToast('Đã sao chép vào khay nhớ tạm!', 'success');
+        }
+
+        // --- CONFLICT DETECTION ---
+        function getPinnedConflicts() {
+            const pinnedGroups = [];
+            subjects.forEach(s => {
+                s.groups.forEach(g => {
+                    if (g.pinned) pinnedGroups.push({ subjectName: s.name, groupName: g.name, sessions: g.sessions });
+                });
+            });
+
+            const conflicts = [];
+            for (let i = 0; i < pinnedGroups.length; i++) {
+                for (let j = i + 1; j < pinnedGroups.length; j++) {
+                    const g1 = pinnedGroups[i];
+                    const g2 = pinnedGroups[j];
+                    for (const s1 of g1.sessions) {
+                        for (const s2 of g2.sessions) {
+                            if (s1.day === s2.day && Math.max(s1.start, s2.start) <= Math.min(s1.end, s2.end)) {
+                                conflicts.push(`<b>${g1.subjectName} (Nhóm ${g1.groupName})</b> trùng lịch với <b>${g2.subjectName} (Nhóm ${g2.groupName})</b> vào Thứ ${s1.day} (Tiết ${Math.max(s1.start, s2.start)}-${Math.min(s1.end, s2.end)})`);
+                            }
+                        }
+                    }
+                }
+            }
+            return conflicts;
+        }
+
         // --- NAVIGATION & RENDER ENGINE ---
         function setActiveTab(tab) {
             if (activeTab === tab) return;
@@ -202,6 +324,7 @@
             // Reset UI state when changing tabs
             uiState.addingGroupToSubject = null;
             uiState.addingSessionToGroup = null;
+            uiState.editingSessionId = null;
             renderAll();
         }
 
@@ -222,7 +345,7 @@
             const nav = document.getElementById('tab-navigation');
             nav.innerHTML = `
                 <button onclick="setActiveTab('input')" class="px-3 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${activeTab === 'input' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700'}">
-                    <i class="fa-solid fa-book-open text-base"></i> <span class="hidden sm:inline">Nhập Môn</span>
+                    <i class="fa-solid fa-book-open text-base"></i> <span class="hidden sm:inline">Nhập Học Phần</span>
                 </button>
                 <button onclick="setActiveTab('filters')" class="px-3 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${activeTab === 'filters' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700'}">
                     <i class="fa-solid fa-sliders text-base"></i> <span class="hidden sm:inline">Ưu Tiên</span>
@@ -241,7 +364,7 @@
             const name = input.value.trim();
             if (name) {
                 subjects.push({ id: Date.now().toString(), name, groups: [] });
-                showToast(`Đã thêm môn "${name}"`, 'success');
+                showToast(`Đã thêm Học phần "${name}"`, 'success');
                 renderAll();
                 
                 // Focus lại ô input sau khi render
@@ -250,15 +373,15 @@
                     if (newInput) newInput.focus();
                 }, 0);
             } else {
-                showToast('Vui lòng nhập tên môn học!', 'error');
+                showToast('Vui lòng nhập tên học phần!', 'error');
             }
         }
 
         function deleteSubject(id) {
             const subj = subjects.find(s => s.id === id);
-            showConfirm('Xóa môn học', `Bạn có chắc chắn muốn xóa môn <b class="dark:text-white">${subj.name}</b> cùng toàn bộ các nhóm bên trong?`, () => {
+            showConfirm('Xóa học phần', `Bạn có chắc chắn muốn xóa Học phần <b class="dark:text-white">${subj.name}</b> cùng toàn bộ các nhóm bên trong?`, () => {
                 subjects = subjects.filter(s => s.id !== id);
-                showToast('Đã xóa môn học', 'info');
+                showToast('Đã xóa học phần', 'info');
                 renderAll();
             });
         }
@@ -266,7 +389,8 @@
         // --- INLINE FORM: GROUP ---
         function setAddingGroup(subjectId) {
             uiState.addingGroupToSubject = subjectId;
-            uiState.addingSessionToGroup = null; // Close session forms
+            uiState.addingSessionToGroup = null; 
+            uiState.editingSessionId = null;
             renderAll();
             setTimeout(() => document.getElementById(`new-group-name-${subjectId}`)?.focus(), 50);
         }
@@ -318,10 +442,11 @@
             renderAll();
         }
 
-        // --- INLINE FORM: SESSION ---
+        // --- INLINE FORM: SESSION (ADD & EDIT) ---
         function setAddingSession(groupId) {
             uiState.addingSessionToGroup = groupId;
-            uiState.addingGroupToSubject = null; // Close group forms
+            uiState.addingGroupToSubject = null; 
+            uiState.editingSessionId = null;
             renderAll();
         }
 
@@ -334,7 +459,6 @@
             const day = parseInt(document.getElementById(`sess-day-${groupId}`).value);
             const start = parseInt(document.getElementById(`sess-start-${groupId}`).value);
             const end = parseInt(document.getElementById(`sess-end-${groupId}`).value);
-            // Phòng học và Giáo viên không bắt buộc, tự động gán 'Chưa xếp' nếu bỏ trống
             const room = document.getElementById(`sess-room-${groupId}`).value.trim() || '...';
             const teacher = document.getElementById(`sess-teacher-${groupId}`).value.trim() || '...';
 
@@ -362,6 +486,58 @@
             
             uiState.addingSessionToGroup = null;
             showToast('Đã thêm buổi học thành công', 'success');
+            renderAll();
+        }
+
+        // Editing Session Functions
+        function setEditingSession(sessionId) {
+            uiState.editingSessionId = sessionId;
+            uiState.addingSessionToGroup = null;
+            uiState.addingGroupToSubject = null;
+            renderAll();
+        }
+
+        function cancelEditingSession() {
+            uiState.editingSessionId = null;
+            renderAll();
+        }
+
+        function updateSession(subjectId, groupId, sessionId) {
+            const day = parseInt(document.getElementById(`edit-sess-day-${sessionId}`).value);
+            const start = parseInt(document.getElementById(`edit-sess-start-${sessionId}`).value);
+            const end = parseInt(document.getElementById(`edit-sess-end-${sessionId}`).value);
+            const room = document.getElementById(`edit-sess-room-${sessionId}`).value.trim() || '...';
+            const teacher = document.getElementById(`edit-sess-teacher-${sessionId}`).value.trim() || '...';
+
+            if (!day || !start || !end) {
+                showToast('Vui lòng điền đủ Thứ, Tiết Bắt đầu và Tiết Kết thúc!', 'error');
+                return;
+            }
+
+            if (start > end) {
+                showToast('Tiết bắt đầu không thể lớn hơn tiết kết thúc!', 'error');
+                return;
+            }
+
+            subjects = subjects.map(subj => {
+                if (subj.id === subjectId) {
+                    subj.groups = subj.groups.map(g => {
+                        if (g.id === groupId) {
+                            g.sessions = g.sessions.map(s => {
+                                if (s.id === sessionId) {
+                                    return { ...s, day, start, end, room, teacher };
+                                }
+                                return s;
+                            });
+                        }
+                        return g;
+                    });
+                }
+                return subj;
+            });
+            
+            uiState.editingSessionId = null;
+            showToast('Đã cập nhật thông tin buổi học', 'success');
             renderAll();
         }
 
@@ -405,8 +581,7 @@
             if (preferredGroups.includes(groupId)) {
                 preferredGroups = preferredGroups.filter(id => id !== groupId);
             } else {
-                // Chỉ cho phép chọn 1 nhóm ưu tiên cho mỗi môn
-                preferredGroups = preferredGroups.filter(id => !subjectGroupIds.includes(id));
+                // Cho phép chọn nhiều nhóm ưu tiên (không tự động xóa nhóm cũ nữa)
                 preferredGroups.push(groupId);
             }
             renderAll();
@@ -519,26 +694,50 @@
 
         // --- TEMPLATE RENDERERS ---
         function renderInputTab() {
+            const conflicts = getPinnedConflicts();
             let html = `
             <div class="space-y-8 animate-slide-up">
-                
+            `;
+
+            // Báo đỏ khi có xung đột giữa các nhóm bắt buộc
+            if (conflicts.length > 0) {
+                html += `
+                <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-400 p-5 rounded-2xl shadow-sm animate-slide-up">
+                    <h4 class="font-bold flex items-center gap-2 mb-3"><i class="fa-solid fa-triangle-exclamation text-lg"></i> Cảnh báo: Trùng lịch các nhóm bắt buộc!</h4>
+                    <ul class="list-disc pl-5 text-sm space-y-1.5 font-medium">
+                        ${conflicts.map(c => `<li>${c}</li>`).join('')}
+                    </ul>
+                    <p class="text-xs mt-3 opacity-80 italic">* Hệ thống sẽ không thể xếp được lịch nếu các nhóm bị "Ghim" xung đột với nhau. Vui lòng bỏ ghim hoặc điều chỉnh lại!</p>
+                </div>
+                `;
+            }
+
+            html += `
                 <!-- Main Input Section -->
                 <div class="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-700/60 relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-1 h-full bg-blue-500 dark:bg-blue-400"></div>
-                    <div class="max-w-3xl">
-                        <h2 class="text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">Thêm Môn Học Mới</h2>
-                        <p class="text-slate-500 dark:text-slate-400 mt-2 mb-6 text-sm">Nhập tên môn học bạn dự định đăng ký trong học kỳ này.</p>
+                    <div class="max-w-4xl">
+                        <h2 class="text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">Thêm Học Phần Mới</h2>
+                        <p class="text-slate-500 dark:text-slate-400 mt-2 mb-6 text-sm">Nhập tên học phần bạn dự định đăng ký trong học kỳ này.</p>
                         
                         <div class="flex flex-col sm:flex-row gap-3">
                             <div class="relative flex-1">
                                 <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                     <i class="fa-solid fa-book text-slate-400 dark:text-slate-500"></i>
                                 </div>
-                                <input type="text" id="new-subject-name" placeholder="VD: Toán Cao Cấp, Lập Trình Web..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-3.5 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-700 dark:text-slate-100" onkeypress="if(event.key === 'Enter') addNewSubjectFromInput()">
+                                <input type="text" id="new-subject-name" placeholder="VD: Giải tích phức, Lịch sử Đảng..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-3.5 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-700 dark:text-slate-100" onkeypress="if(event.key === 'Enter') addNewSubjectFromInput()">
                             </div>
                             <button onclick="addNewSubjectFromInput()" class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-8 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 dark:shadow-blue-900/40 transition-all hover:-translate-y-0.5 whitespace-nowrap">
-                                <i class="fa-solid fa-plus text-sm"></i> Thêm Môn
+                                <i class="fa-solid fa-plus text-sm"></i> Thêm Học Phần
                             </button>
+                            <div class="flex flex-row gap-2">
+                                <button onclick="openImportModal()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-5 sm:px-6 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap flex-1 sm:flex-none">
+                                    <i class="fa-solid fa-file-import text-sm"></i> <span class="hidden sm:inline">Nhập</span> Data
+                                </button>
+                                <button onclick="openExportModal()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-5 sm:px-6 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap flex-1 sm:flex-none">
+                                    <i class="fa-solid fa-file-export text-sm"></i> <span class="hidden sm:inline">Xuất</span> Data
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -550,8 +749,8 @@
                     <div class="bg-white dark:bg-slate-800 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5 text-blue-400 dark:text-blue-500 text-3xl shadow-sm border border-slate-100 dark:border-slate-700 rotate-3">
                         <i class="fa-solid fa-layer-group"></i>
                     </div>
-                    <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">Chưa có dữ liệu môn học</h3>
-                    <p class="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Vui lòng nhập tên môn học ở ô bên trên để bắt đầu xây dựng thời khóa biểu của bạn.</p>
+                    <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">Chưa có dữ liệu học phần</h3>
+                    <p class="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Vui lòng nhập tên học phần ở ô bên trên để bắt đầu xây dựng thời khóa biểu của bạn.</p>
                 </div>`;
             } else {
                 html += `<div class="grid grid-cols-1 gap-8 mt-8">`;
@@ -570,7 +769,7 @@
                                 <button onclick="setAddingGroup('${subject.id}')" class="text-sm bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-300 px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all shadow-sm">
                                     <i class="fa-solid fa-plus"></i> Thêm Nhóm
                                 </button>
-                                <button onclick="deleteSubject('${subject.id}')" class="text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-lg transition-colors" title="Xóa môn này">
+                                <button onclick="deleteSubject('${subject.id}')" class="text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-lg transition-colors" title="Xóa Học phần này">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
@@ -595,7 +794,7 @@
                     if (subject.groups.length === 0 && uiState.addingGroupToSubject !== subject.id) {
                         html += `
                             <div class="text-center py-8 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                                <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Môn học này chưa có nhóm nào.</p>
+                                <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Học phần này chưa có nhóm nào.</p>
                                 <button onclick="setAddingGroup('${subject.id}')" class="mt-2 text-blue-600 dark:text-blue-400 font-semibold text-sm hover:underline">Thêm nhóm ngay</button>
                             </div>
                         `;
@@ -631,26 +830,78 @@
                             `;
 
                             group.sessions.forEach(session => {
-                                const dayStr = session.day === 8 ? 'Chủ Nhật' : `Thứ ${session.day}`;
-                                html += `
-                                    <div class="group relative flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 p-3 rounded-lg border border-slate-200/60 dark:border-slate-700 transition-colors">
-                                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
-                                            <span class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100"><i class="fa-regular fa-calendar text-blue-500 dark:text-blue-400"></i> ${dayStr}</span>
-                                            <span class="flex items-center gap-1.5 font-medium"><i class="fa-regular fa-clock text-emerald-500 dark:text-emerald-400"></i> Tiết ${session.start}-${session.end}</span>
-                                            <span class="flex items-center gap-1.5 font-medium"><i class="fa-solid fa-location-dot text-rose-500 dark:text-rose-400"></i> ${session.room}</span>
-                                            <span class="flex items-center gap-1.5"><i class="fa-regular fa-user text-sky-500 dark:text-sky-400"></i> ${session.teacher}</span>
+                                // Nếu session này đang được edit
+                                if (uiState.editingSessionId === session.id) {
+                                    html += `
+                                    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 mt-2 mb-2 animate-slide-up">
+                                        <div class="flex items-center gap-2 mb-3 text-sm font-bold text-amber-700 dark:text-amber-400">
+                                            <i class="fa-solid fa-pen-to-square"></i> Cập nhật thông tin
                                         </div>
-                                        <button onclick="deleteSession('${subject.id}', '${group.id}', '${session.id}')" class="text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-all mt-2 sm:mt-0 sm:absolute sm:right-2 sm:top-2 sm:opacity-0 sm:group-hover:opacity-100">
-                                            <i class="fa-solid fa-circle-xmark text-lg bg-slate-50 dark:bg-slate-800 rounded-full"></i>
-                                        </button>
+                                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-amber-900 dark:text-amber-300 mb-1">Thứ</label>
+                                                <select id="edit-sess-day-${session.id}" class="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-amber-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-amber-500 dark:focus:border-amber-400">
+                                                    ${[2,3,4,5,6,7,8].map(d => `<option value="${d}" ${d === session.day ? 'selected' : ''}>${d===8?'Chủ Nhật':`Thứ ${d}`}</option>`).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-amber-900 dark:text-amber-300 mb-1">Tiết BĐ</label>
+                                                <select id="edit-sess-start-${session.id}" class="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-amber-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-amber-500 dark:focus:border-amber-400">
+                                                    ${[1,2,3,4,5,6,7,8,9].map(p => `<option value="${p}" ${p === session.start ? 'selected' : ''}>${p}</option>`).join('')}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-amber-900 dark:text-amber-300 mb-1">Tiết KT</label>
+                                                <select id="edit-sess-end-${session.id}" class="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-amber-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-amber-500 dark:focus:border-amber-400">
+                                                    ${[1,2,3,4,5,6,7,8,9].map(p => `<option value="${p}" ${p === session.end ? 'selected' : ''}>${p}</option>`).join('')}
+                                                </select>
+                                            </div>
+                                            <div class="col-span-2 sm:col-span-1">
+                                                <label class="block text-xs font-semibold text-amber-900 dark:text-amber-300 mb-1">Phòng</label>
+                                                <input type="text" id="edit-sess-room-${session.id}" value="${session.room === '...' ? '' : session.room}" placeholder="VD: A1" class="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-amber-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-amber-500 dark:focus:border-amber-400">
+                                            </div>
+                                            <div class="col-span-2 sm:col-span-4">
+                                                <label class="block text-xs font-semibold text-amber-900 dark:text-amber-300 mb-1">Giáo viên</label>
+                                                <input type="text" id="edit-sess-teacher-${session.id}" value="${session.teacher === '...' ? '' : session.teacher}" placeholder="Tên GV..." class="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-amber-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-amber-500 dark:focus:border-amber-400">
+                                            </div>
+                                        </div>
+                                        <div class="flex justify-end gap-2">
+                                            <button onclick="cancelEditingSession()" class="px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 rounded-md transition-colors">Hủy</button>
+                                            <button onclick="updateSession('${subject.id}', '${group.id}', '${session.id}')" class="px-3 py-1.5 text-sm font-semibold text-white bg-amber-600 dark:bg-amber-500 hover:bg-amber-700 dark:hover:bg-amber-600 rounded-md transition-colors shadow-sm">Cập nhật</button>
+                                        </div>
                                     </div>
-                                `;
+                                    `;
+                                } else {
+                                    // Giao diện hiển thị bình thường
+                                    const dayStr = session.day === 8 ? 'Chủ Nhật' : `Thứ ${session.day}`;
+                                    html += `
+                                        <div class="group relative flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 p-3 rounded-lg border border-slate-200/60 dark:border-slate-700 transition-colors">
+                                            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300 pr-16">
+                                                <span class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100"><i class="fa-regular fa-calendar text-blue-500 dark:text-blue-400"></i> ${dayStr}</span>
+                                                <span class="flex items-center gap-1.5 font-medium"><i class="fa-regular fa-clock text-emerald-500 dark:text-emerald-400"></i> Tiết ${session.start}-${session.end}</span>
+                                                <span class="flex items-center gap-1.5 font-medium"><i class="fa-solid fa-location-dot text-rose-500 dark:text-rose-400"></i> ${session.room}</span>
+                                                <span class="flex items-center gap-1.5"><i class="fa-regular fa-user text-sky-500 dark:text-sky-400"></i> ${session.teacher}</span>
+                                            </div>
+                                            <div class="absolute right-2 top-2 sm:opacity-0 sm:group-hover:opacity-100 flex gap-1 transition-all">
+                                                <button onclick="setEditingSession('${session.id}')" class="text-slate-400 hover:text-amber-500 dark:text-slate-500 dark:hover:text-amber-400 w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-600 rounded-md transition-colors" title="Sửa buổi học">
+                                                    <i class="fa-solid fa-pen text-xs"></i>
+                                                </button>
+                                                <button onclick="deleteSession('${subject.id}', '${group.id}', '${session.id}')" class="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-600 rounded-md transition-colors" title="Xóa buổi học">
+                                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
                             });
 
                             // Add Session Button or Inline Form
                             if (uiState.addingSessionToGroup === group.id) {
                                 html += `
                                     <div class="bg-blue-50 dark:bg-slate-900/80 border border-blue-100 dark:border-slate-700 rounded-lg p-4 mt-3 animate-slide-up">
+                                        <div class="flex items-center gap-2 mb-3 text-sm font-bold text-blue-700 dark:text-blue-400">
+                                            <i class="fa-solid fa-plus-circle"></i> Thêm buổi học mới
+                                        </div>
                                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                                             <div>
                                                 <label class="block text-xs font-semibold text-blue-900 dark:text-blue-300 mb-1">Thứ</label>
@@ -722,9 +973,6 @@
             let html = `
             <div class="space-y-8 animate-slide-up max-w-4xl mx-auto">
                 <div class="text-center mb-10">
-                    <div class="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
-                        <i class="fa-solid fa-sliders"></i>
-                    </div>
                     <h2 class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">Cài đặt Ưu tiên</h2>
                     <p class="text-slate-500 dark:text-slate-400 mt-3 text-lg">Thiết lập các mong muốn của bạn để hệ thống tìm ra lịch học ưng ý nhất.</p>
                 </div>
@@ -792,15 +1040,15 @@
                         <div>
                             <h3 class="font-bold text-slate-800 dark:text-slate-100 mb-2 flex items-center gap-2 text-lg">
                                 <div class="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 flex items-center justify-center"><i class="fa-solid fa-users"></i></div>
-                                Chọn nhóm ưu tiên (Bạn bè/Giảng viên)
+                                Chọn nhóm ưu tiên
                             </h3>
-                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Mỗi môn học bạn có thể đánh dấu 1 nhóm yêu thích nhất. Hệ thống sẽ cố gắng xếp bạn vào nhóm này.</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Mỗi học phần bạn có thể đánh dấu nhóm yêu thích nhất. Hệ thống sẽ cố gắng xếp bạn vào nhóm này.</p>
                             
                             <div class="grid md:grid-cols-2 gap-5">
             `;
 
             if (subjects.length === 0) {
-                html += `<div class="col-span-2 bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center text-slate-500 dark:text-slate-400 text-sm font-medium">Chưa có môn học nào để chọn. Quay lại tab Nhập Môn để thêm.</div>`;
+                html += `<div class="col-span-2 bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center text-slate-500 dark:text-slate-400 text-sm font-medium">Chưa có học phần nào để chọn. Quay lại tab Nhập Học Phần để thêm.</div>`;
             } else {
                 subjects.forEach(subj => {
                     if (subj.groups.length > 0) {
@@ -858,7 +1106,7 @@
             <div class="animate-slide-up h-full">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                     <div>
-                        <h2 class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">Kết quả Xếp lịch</h2>
+                        <h2 class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">Kết quả Xếp thời khóa biểu</h2>
                         <p class="text-slate-500 dark:text-slate-400 mt-1 font-medium">Đã tìm thấy <strong class="text-blue-600 dark:text-blue-400">${generatedSchedules.length}</strong> lựa chọn phù hợp</p>
                     </div>
                     <button onclick="startGenerating()" class="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center gap-2">
@@ -874,7 +1122,7 @@
                         <i class="fa-solid fa-triangle-exclamation"></i>
                     </div>
                     <h3 class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-3">Rất tiếc, không có lịch phù hợp!</h3>
-                    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">Có thể các môn học bắt buộc của bạn bị trùng giờ nhau, hoặc các nhóm "Bắt buộc" đang xung đột. Hãy kiểm tra lại thời gian của các nhóm lớp.</p>
+                    <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">Có thể các học phần bắt buộc của bạn bị trùng giờ nhau, hoặc các nhóm "Bắt buộc" đang xung đột. Hãy kiểm tra lại thời gian của các nhóm lớp.</p>
                     <button onclick="setActiveTab('input')" class="bg-slate-800 dark:bg-slate-100 hover:bg-slate-900 dark:hover:bg-white text-white dark:text-slate-900 px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-slate-800/20 dark:shadow-slate-100/10 transition-all">
                         Quay lại kiểm tra
                     </button>
@@ -903,7 +1151,7 @@
                 html += `
                     <div onclick="selectSchedule(${index})" class="cursor-pointer p-4 rounded-xl border transition-all ${borderClass}">
                         <div class="flex justify-between items-center mb-2">
-                            <span class="font-extrabold text-slate-800 dark:text-slate-100">Lựa chọn ${index + 1}</span>
+                            <span class="font-extrabold text-slate-800 dark:text-slate-100">TKB ${index + 1}</span>
                             <span class="text-xs font-bold px-2.5 py-1 rounded-md ${scoreClass}">
                                 ${item.score} điểm
                             </span>
@@ -970,7 +1218,7 @@
                 periods.forEach(p => gridMap[d][p] = null);
             });
 
-            // Color palette cho các môn học để dễ nhìn (Tự động xoay vòng)
+            // Color palette cho các học phần để dễ nhìn (Tự động xoay vòng)
             const colorClasses = [
                 'bg-blue-600 dark:bg-blue-500', 
                 'bg-emerald-600 dark:bg-emerald-500', 
@@ -1071,8 +1319,94 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             renderAll();
+       
         });
+// Hàm đóng popup và lưu trạng thái vào localStorage
+    function closeTutorial() {
+        const modal = document.getElementById('tutorial-modal');
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            // Lưu vào localStorage để không hiện lại lần sau
+            localStorage.setItem('hasSeenAutoTKBTutorial', 'true');
+        }, 300);
+    }
 
+    // Hàm kiểm tra và hiển thị popup khi tải trang
+    function checkAndShowTutorial() {
+        const hasSeen = localStorage.getItem('hasSeenAutoTKBTutorial');
+        if (!hasSeen) {
+            const modal = document.getElementById('tutorial-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Focus vào nút "Đã hiểu" để người dùng có thể nhấn Enter đóng ngay
+            setTimeout(() => {
+                const btn = modal.querySelector('button');
+                if(btn) btn.focus();
+            }, 100);
+        }
+    }
+
+    // Tích hợp vào sự kiện load trang hiện tại của bạn
+    document.addEventListener('DOMContentLoaded', () => {
+        // ... (các code khởi tạo khác của bạn: renderAll, etc.)
+        
+        // Gọi hàm kiểm tra popup
+        checkAndShowTutorial();
+    });
     </script>
+    <div id="tutorial-modal" class="fixed inset-0 z-[100] hidden items-center justify-center px-4">
+    <!-- Nền tối mờ -->
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+    
+    <!-- Nội dung Popup -->
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden z-10 transform transition-all animate-slide-up border border-slate-200 dark:border-slate-700">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-center relative overflow-hidden">
+            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
+            <i class="fa-solid fa-wand-magic-sparkles text-4xl text-white mb-3 shadow-sm"></i>
+            <h3 class="text-2xl font-extrabold text-white tracking-tight">Chào mừng đến với AutoTKB!</h3>
+            <p class="text-blue-100 mt-1 text-sm font-medium">Trợ lý xếp thời khóa biểu thông minh của bạn.</p>
+        </div>
+        
+        <!-- Body -->
+        <div class="p-6 space-y-5">
+            <p class="text-slate-600 dark:text-slate-300 text-sm font-medium mb-2">Chỉ với 3 bước đơn giản để có một lịch học hoàn hảo:</p>
+            
+            <div class="flex gap-4 items-start">
+                <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0 shadow-inner">1</div>
+                <div>
+                    <h4 class="font-bold text-slate-800 dark:text-slate-100">Nhập Học Phần & Nhóm</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Thêm các Học phần bạn muốn học, tạo các nhóm và điền Thứ, Tiết, Phòng cho từng nhóm. Đừng quên nút "Ghim" nếu bạn muốn bắt buộc phải học nhóm đó nhé!</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-4 items-start">
+                <div class="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0 shadow-inner">2</div>
+                <div>
+                    <h4 class="font-bold text-slate-800 dark:text-slate-100">Cài Đặt Ưu Tiên</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Chọn ngày bạn muốn đi học (hoặc muốn nghỉ), và đánh dấu các "Nhóm ưu tiên" (có giảng viên tốt hoặc học chung với bạn bè).</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-4 items-start">
+                <div class="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-500 dark:text-amber-400 flex items-center justify-center font-bold shrink-0 shadow-inner">3</div>
+                <div>
+                    <h4 class="font-bold text-slate-800 dark:text-slate-100">Tạo & Chọn Lịch</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Hệ thống sẽ tính toán hàng trăm tổ hợp, loại bỏ các lịch trùng và chấm điểm TKB cho bạn. Việc còn lại là chọn lịch điểm cao nhất!</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer / Nút bấm -->
+        <div class="bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex justify-end border-t border-slate-100 dark:border-slate-700">
+            <button onclick="closeTutorial()" class="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-xl transition-all shadow-md shadow-blue-600/20 hover:-translate-y-0.5">
+                Đã hiểu, bắt đầu thôi!
+            </button>
+        </div>
+    </div>
+</div>
 </body>
 </html>
